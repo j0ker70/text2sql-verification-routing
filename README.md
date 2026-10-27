@@ -58,7 +58,11 @@ Analysis (`analyze.py`):
 - **Routing curve** — sort questions by ascending agreement (most-disagreeing first) and
   plot the cumulative share of self-consistency errors covered as the routing budget grows
   0 → 100%. **AUC** summarizes concentration (0.5 = errors spread randomly; higher = errors
-  concentrated at low agreement).
+  concentrated at low agreement). This is the area under an error-coverage curve, not an ROC
+  curve: with a 53% error rate, a perfect ranking scores only 0.733 here, not 1.0.
+- **AUROC** — the standard ranking metric, reported alongside the routing AUC: the
+  probability that a randomly chosen selection error is more disagreeing than a randomly
+  chosen correct selection (ties count ½). 0.5 = random, 1.0 = perfect.
 - **Crash vs result-disagreement separation** — recompute agreement over *only*
   successfully-executing candidates (`agreement_exec = largest cluster / #successful`, on an
   executable-only subset) to confirm the signal is genuine result-disagreement and not just
@@ -67,7 +71,8 @@ Analysis (`analyze.py`):
 ## Results
 
 All numbers are read from `analysis_full.json` (full run) and `analysis_smoke.json`
-(50-question smoke). Generation: Qwen2.5-Coder-7B, K = 8, temp 0.7, seed 42.
+(50-question smoke), except AUROC, which is computed from the per-question records in
+`results.json`. Generation: Qwen2.5-Coder-7B, K = 8, temp 0.7, seed 42.
 
 ![Self-consistency accuracy by agreement bucket, and share of errors covered vs routing budget](figures/routing_results.png)
 
@@ -90,29 +95,31 @@ agreement drops, and errors concentrate in the low-agreement buckets:
 | split (a < 0.5) | 122 (24.5%) | 19.7% | 36.8% |
 
 **Routing curve** — routing the most-disagreeing questions first covers errors faster than
-random: **AUC 0.616** (vs 0.500). The most-disagreeing 50% of questions contain ~69% of all
-selection errors.
+random: **routing AUC 0.616** (random 0.500, perfect 0.733), equivalent to **AUROC 0.744**.
+The most-disagreeing 50% of questions contain ~69% of all selection errors.
 
 **Crash vs genuine result-disagreement** (executable-only subset, n = 470; 20 all-crash +
 8 single-success excluded):
 
-- Result-disagreement alone still predicts errors: **AUC 0.607**.
-- Crash rate alone also predicts, but more weakly: **AUC 0.585** (mean crash rate 9.6% for
-  correct vs 24.7% for incorrect selections).
-- The combined `agreement = largest / K` (0.616) is the strongest single signal, because it
-  captures both failure modes.
+- Result-disagreement alone still predicts errors: **AUROC 0.710** (routing AUC 0.607).
+- Crash rate alone also predicts, but more weakly: **AUROC 0.645** (routing AUC 0.585; mean
+  crash rate 9.6% for correct vs 24.7% for incorrect selections).
+- The combined `agreement = largest / K` (AUROC 0.744, routing AUC 0.616) is the strongest
+  single signal, because it captures both failure modes.
 
 **Confident-but-wrong ceiling** — **28.1%** of unanimous questions are still wrong. These
 account for **17.7% of all errors** and carry no disagreement signal, so a disagreement-based
 router structurally cannot flag them.
 
 **Smoke (n = 50) → full (n = 498)** — the signal held and sharpened with scale: routing AUC
-0.591 → 0.616; result-disagreement-only AUC 0.592 → 0.607.
+0.591 → 0.616; result-disagreement-only routing AUC 0.592 → 0.607. (AUROC is not reported for
+the smoke run because `results_smoke.json` is not committed.)
 
 **Interpretation.** Candidate disagreement is a usable, near-free difficulty signal —
 self-consistency errors concentrate where candidates disagree — which **supports** the
-premise behind verification routing. The signal is modest (AUC ≈ 0.62), and ~18% of errors
-are confident-but-wrong and beyond its reach. No router is built or evaluated here.
+premise behind verification routing. The signal is moderate (AUROC ≈ 0.74; routing AUC ≈ 0.62
+against a ceiling of 0.73), and ~18% of errors are confident-but-wrong and beyond its reach.
+No router is built or evaluated here.
 
 ## How to run
 
@@ -173,8 +180,8 @@ Configuration (env vars or a `.env` file; see `config.py`): `LLM_MODEL`, `NUM_CA
   stronger models that agree more often.
 - **Single benchmark, modest size** — BIRD Mini-Dev only (n ≈ 498). No cross-benchmark or
   cross-domain check.
-- **Modest signal** — routing AUC ≈ 0.62: clearly above random, but far from a clean
-  separator.
+- **Moderate signal** — AUROC ≈ 0.74 (routing AUC ≈ 0.62 against a ceiling of 0.73): clearly
+  above random, but far from a clean separator.
 - **Confident-but-wrong floor** — ~18% of errors occur on unanimous questions; disagreement
   cannot flag them, capping a disagreement-only router near ~82% error recall.
 - **No router** — this study measures a signal. It does **not** implement, tune, or evaluate
